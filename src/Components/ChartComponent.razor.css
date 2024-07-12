@@ -1,0 +1,21 @@
+﻿.rgfcharts-flex-container-end {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: flex-end;
+}
+
+.rgfcharts-flex-container-between {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.p-1 {
+    padding: 0.25rem;
+}
+
+.mt-1 {
+    margin-top: 0.25rem;
+}
