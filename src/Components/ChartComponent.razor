@@ -1,23 +1,8 @@
 ﻿<RgfChartComponent @ref="_rgfChartRef" EntityParameters="EntityParameters">
     <ChartTemplate Context="RgfCharComp">
-        <ApexChart TItem="ChartSerieData"
-                   Title="@_title"
-                   Options="_options"
-                   Height="@(_height == null ? "100%" : _height)"
-                   Width="@(_width == null ? "100%" : _width)"
-                   @ref=_chartRef>
-
-            @foreach (var serie in _series)
-            {
-                <ApexPointSeries TItem="ChartSerieData"
-                                 Items="@serie.Data"
-                                 Name="@serie.Name"
-                                 SeriesType="(SeriesType)_seriesType"
-                                 XValue="@(e => e.X)"
-                                 YValue="@(e => e.Y)"
-                                 ShowDataLabels />
-            }
-        </ApexChart>
+        <div style="overflow:hidden">
+            <ApexChartComponent @ref=_chartRef ChartSettings="@_chartSettings"/>
+        </div>
     </ChartTemplate>
 
     <FooterTemplate Context="RgfCharComp">
@@ -25,13 +10,13 @@
             <div class="rgfcharts-flex-container rgfcharts-justify-content-start">
                 <div class="p-1">
                     <label class="col-form-label text-nowrap">X</label>
-                    <InputSelect TValue="string" Value="Model.Columns[0].Aggregate" ValueExpression="() => Model.Columns[0].Aggregate" ValueChanged="(arg) => OnChangeAggregate(arg, Model.Columns[0], 0)">
+                    <InputSelect TValue="string" Value="AggregationSettings.Columns[0].Aggregate" ValueExpression="() => AggregationSettings.Columns[0].Aggregate" ValueChanged="(arg) => OnChangeAggregate(arg, AggregationSettings.Columns[0], 0)">
                         @foreach (var option in new string[] { "", "Count" })
                         {
                             <option value="@option">@option</option>
                         }
                     </InputSelect>
-                    <InputSelect TValue="int" @bind-Value="Model.Columns[0].PropertyId">
+                    <InputSelect TValue="int" @bind-Value="AggregationSettings.Columns[0].PropertyId">
                         <option value="0"></option>
                         @foreach (var option in RgfCharComp.ChartColumns.OrderBy(e => e.ColTitle).ToDictionary(p => p.Id, p => p.ColTitle))
                         {
@@ -43,7 +28,7 @@
                 {
                     <div class="p-1">
                         <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("Group")</label>
-                        <InputSelect TValue="int" @bind-Value="Model.Columns[1].PropertyId">
+                        <InputSelect TValue="int" @bind-Value="AggregationSettings.Columns[1].PropertyId">
                             <option value="0"></option>
                             @foreach (var option in RgfCharComp.ChartColumns.OrderBy(e => e.ColTitle).ToDictionary(p => p.Id, p => p.ColTitle))
                             {
@@ -54,16 +39,16 @@
                 }
                 <div class="p-1">
                     <label class="form-label">Max.@RecroDict.GetRgfUiString("ItemCount")</label>
-                    <InputNumber @bind-Value=@Model.Take style="width:5rem" />
+                    <InputNumber @bind-Value=@AggregationSettings.Take style="width:5rem" />
                 </div>
             </div>
             <div class="rgfcharts-flex-container rgfcharts-justify-content-start">
                 @if (!_isCount && ChartColumnsNumeric != null)
                 {
-                    <ValidationMessage For="@(() => Model.Columns[1].PropertyId)" />
-                    @for (int i = 1; i < Model.Columns.Count(); i++)
+                    <ValidationMessage For="@(() => AggregationSettings.Columns[1].PropertyId)" />
+                    @for (int i = 1; i < AggregationSettings.Columns.Count(); i++)
                     {
-                        var col = Model.Columns[i];
+                        var col = AggregationSettings.Columns[i];
                         <div class="p-1">
                             <label class="col-form-label text-nowrap">Y</label>
                             <InputSelect TValue="string" Value="col.Aggregate" ValueExpression="() => col.Aggregate" ValueChanged="(arg) => OnChangeAggregate(arg, col, i)">
@@ -93,7 +78,7 @@
             <div class="rgfcharts-flex-container rgfcharts-justify-content-start">
                 <div class="p-1">
                     <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("ChartType")</label>
-                    <InputSelect TValue="SeriesType" Value="_seriesType" ValueExpression="() => _seriesType" ValueChanged="(arg) => { _seriesType = arg; _ = UpdateChart(); }">
+                    <InputSelect TValue="SeriesType" Value="_chartSettings.SeriesType" ValueExpression="() => _chartSettings.SeriesType" ValueChanged="(arg) => { _chartSettings.SeriesType = arg; _ = UpdateChart(); }">
                         @foreach (var option in new SeriesType[] { SeriesType.Bar, SeriesType.Line, SeriesType.Pie, SeriesType.Donut })
                         {
                             <option value="@option">@option</option>
@@ -102,15 +87,15 @@
                 </div>
                 <div class="p-1">
                     <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("Stacked")</label>
-                    <InputCheckbox Value="_stacked" ValueExpression="() => _stacked" ValueChanged="(arg) => { _options.Chart.Stacked = _stacked = arg; _ = UpdateChart(); }" />
+                    <InputCheckbox Value="_stacked" ValueExpression="() => _stacked" ValueChanged="(arg) => { _chartSettings.Options.Chart.Stacked = _stacked = arg; _ = UpdateChart(); }" />
                 </div>
                 <div class="p-1">
                     <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("Horizontal")</label>
-                    <InputCheckbox Value="_horizontal" ValueExpression="() => _horizontal" ValueChanged="(arg) => { _options.PlotOptions.Bar.Horizontal = _horizontal = arg; _ = UpdateChart(); }" />
+                    <InputCheckbox Value="_horizontal" ValueExpression="() => _horizontal" ValueChanged="(arg) => { _chartSettings.Options.PlotOptions.Bar.Horizontal = _horizontal = arg; _ = UpdateChart(); }" />
                 </div>
                 <div class="p-1">
                     <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("Theme")</label>
-                    <InputSelect TValue="Mode?" Value="_options.Theme.Mode" ValueExpression="() => _options.Theme.Mode" ValueChanged="(arg) => { _options.Theme.Mode = arg; _ = UpdateChart(); }">
+                    <InputSelect TValue="Mode?" Value="_chartSettings.Options.Theme.Mode" ValueExpression="() => _chartSettings.Options.Theme.Mode" ValueChanged="(arg) => { _chartSettings.Options.Theme.Mode = arg; _ = UpdateChart(); }">
                         @foreach (var option in Enum.GetValues(typeof(Mode)).Cast<Mode>())
                         {
                             <option value="@option">@option</option>
@@ -119,7 +104,7 @@
                 </div>
                 <div class="p-1">
                     <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("Palette")</label>
-                    <InputSelect TValue="PaletteType?" Value="_options.Theme.Palette" ValueExpression="() => _options.Theme.Palette" ValueChanged="(arg) => { _options.Theme.Palette = arg; _ = UpdateChart(); }">
+                    <InputSelect TValue="PaletteType?" Value="_chartSettings.Options.Theme.Palette" ValueExpression="() => _chartSettings.Options.Theme.Palette" ValueChanged="(arg) => { _chartSettings.Options.Theme.Palette = arg; _ = UpdateChart(); }">
                         @foreach (var option in Enum.GetValues(typeof(PaletteType)).Cast<PaletteType>())
                         {
                             <option value="@option">@option</option>
@@ -128,11 +113,11 @@
                 </div>
                 <div class="p-1">
                     <label class="form-label">@RecroDict.GetRgfUiString("Width")</label>
-                    <InputNumber @bind-Value=@_width style="width:5rem" />
+                    <InputNumber @bind-Value=@_chartSettings.Width style="width:5rem" />
                 </div>
                 <div class="p-1">
                     <label class="form-label">@RecroDict.GetRgfUiString("Height")</label>
-                    <InputNumber @bind-Value=@_height style="width:5rem" />
+                    <InputNumber @bind-Value=@_chartSettings.Height style="width:5rem" />
                 </div>
             </div>
             <div class="rgfcharts-flex-container rgfcharts-justify-content-end">
