@@ -1,101 +1,129 @@
 ﻿<RgfChartComponent @ref="_rgfChartRef" EntityParameters="EntityParameters">
-    <ChartTemplate Context="RgfCharComp">
-        <div style="overflow:hidden">
-            <ApexChartComponent @ref=_chartRef ChartSettings="@_chartSettings"/>
+    <ContentTemplate Context="RgfCharComp">
+        <div id="@_containerId" class="rgf-apex-chart">
+            <ApexChartComponent @ref=_chartRef ChartSettings="@_apexChartSettings" />
         </div>
-    </ChartTemplate>
+    </ContentTemplate>
 
     <FooterTemplate Context="RgfCharComp">
         <EditForm EditContext="_editContext" OnValidSubmit="Submit">
             <div class="rgfcharts-flex-container rgfcharts-justify-content-start">
                 <div class="p-1">
-                    <label class="col-form-label text-nowrap">X</label>
-                    <InputSelect TValue="string" Value="AggregationSettings.Columns[0].Aggregate" ValueExpression="() => AggregationSettings.Columns[0].Aggregate" ValueChanged="(arg) => OnChangeAggregate(arg, AggregationSettings.Columns[0], 0)">
-                        @foreach (var option in new string[] { "", "Count" })
-                        {
-                            <option value="@option">@option</option>
-                        }
-                    </InputSelect>
-                    <InputSelect TValue="int" @bind-Value="AggregationSettings.Columns[0].PropertyId">
-                        <option value="0"></option>
-                        @foreach (var option in RgfCharComp.ChartColumns.OrderBy(e => e.ColTitle).ToDictionary(p => p.Id, p => p.ColTitle))
-                        {
-                            <option value="@option.Key">@option.Value</option>
-                        }
-                    </InputSelect>
+                    <label class="col-form-label text-nowrap">Y</label>
                 </div>
-                @if (_isCount)
+                @for (int i = 0; i < ChartParameters.AggregationSettings.Columns.Count(); i++)
                 {
+                    var idx = i;
+                    var col = ChartParameters.AggregationSettings.Columns[idx];
                     <div class="p-1">
-                        <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("Group")</label>
-                        <InputSelect TValue="int" @bind-Value="AggregationSettings.Columns[1].PropertyId">
+                        <ValidationMessage For="@(() => col.Aggregate)" />
+                        <ValidationMessage For="@(() => col.PropertyId)" />
+                        <InputSelect TValue="string" @bind-Value="col.Aggregate">
+                            @foreach (var option in RgfAggregationColumn.AllowedAggregates)
+                            {
+                                <option value="@option">@option</option>
+                            }
+                        </InputSelect>
+                        @if (col.Aggregate != "Count")
+                        {
+                            <InputSelect TValue="int" @bind-Value="col.PropertyId">
+                                <option value="0"></option>
+                                @foreach (var option in RgfCharComp.ChartColumnsNumeric)
+                                {
+                                    <option value="@option.Key">@option.Value</option>
+                                }
+                            </InputSelect>
+                        }
+                    </div>
+                    @if (i != 0)
+                    {
+                        <div class="p-1">
+                            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="(arg) => RgfCharComp.RemoveColumn(col)">-</button>
+                        </div>
+                    }
+                }
+                <div class="p-1">
+                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="(arg) => RgfCharComp.AddColumn()">+</button>
+                </div>
+            </div>
+            <div class="rgfcharts-flex-container rgfcharts-justify-content-start">
+                <div class="p-1">
+                    <label class="col-form-label text-nowrap">X</label>
+                </div>
+                @for (int i = 0; i < ChartParameters.AggregationSettings.Groups.Count(); i++)
+                {
+                    var idx = i;
+                    <div class="p-1">
+                        <ValidationMessage For="@(() => ChartParameters.AggregationSettings.Groups[idx])" />
+                        <InputSelect TValue="int" @bind-Value="ChartParameters.AggregationSettings.Groups[idx]">
                             <option value="0"></option>
-                            @foreach (var option in RgfCharComp.ChartColumns.OrderBy(e => e.ColTitle).ToDictionary(p => p.Id, p => p.ColTitle))
+                            @foreach (var option in RgfCharComp.AllowedProperties.OrderBy(e => e.ColTitle).ToDictionary(p => p.Id, p => p.ColTitle))
                             {
                                 <option value="@option.Key">@option.Value</option>
                             }
                         </InputSelect>
                     </div>
+                    <div class="p-1">
+                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="(arg) => RgfCharComp.RemoveAtGroup(idx)">-</button>
+                    </div>
                 }
                 <div class="p-1">
-                    <label class="form-label">Max.@RecroDict.GetRgfUiString("ItemCount")</label>
-                    <InputNumber @bind-Value=@AggregationSettings.Take style="width:5rem" />
+                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="(arg) => RgfCharComp.AddGroup()">+</button>
                 </div>
             </div>
             <div class="rgfcharts-flex-container rgfcharts-justify-content-start">
-                @if (!_isCount && ChartColumnsNumeric != null)
+                <div class="p-1">
+                    <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("Group")</label>
+                </div>
+                @for (int i = 0; i < ChartParameters.AggregationSettings.SubGroup.Count(); i++)
                 {
-                    <ValidationMessage For="@(() => AggregationSettings.Columns[1].PropertyId)" />
-                    @for (int i = 1; i < AggregationSettings.Columns.Count(); i++)
-                    {
-                        var col = AggregationSettings.Columns[i];
-                        <div class="p-1">
-                            <label class="col-form-label text-nowrap">Y</label>
-                            <InputSelect TValue="string" Value="col.Aggregate" ValueExpression="() => col.Aggregate" ValueChanged="(arg) => OnChangeAggregate(arg, col, i)">
-                                @foreach (var option in new string[] { "Sum", "Avg", "Min", "Max" })
-                                {
-                                    <option value="@option">@option</option>
-                                }
-                            </InputSelect>
-                            <InputSelect TValue="int" @bind-Value="col.PropertyId">
-                                <option value="0"></option>
-                                @foreach (var option in ChartColumnsNumeric)
-                                {
-                                    <option value="@option.Key">@option.Value</option>
-                                }
-                            </InputSelect>
-                            @if (i != 1)
-                            {
-                                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="(arg) => RemoveColumn(col)">-Y</button>
-                            }
-                        </div>
-                    }
+                    var idx = i;
                     <div class="p-1">
-                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="AddColumn">+Y</button>
+                        <ValidationMessage For="@(() => ChartParameters.AggregationSettings.SubGroup[idx])" />
+                        <InputSelect TValue="int" @bind-Value="ChartParameters.AggregationSettings.SubGroup[idx]">
+                            <option value="0"></option>
+                            @foreach (var option in RgfCharComp.AllowedProperties.OrderBy(e => e.ColTitle).ToDictionary(p => p.Id, p => p.ColTitle))
+                            {
+                                <option value="@option.Key">@option.Value</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="p-1">
+                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="(arg) => RgfCharComp.RemoveAtSubGroup(idx)">-</button>
                     </div>
                 }
+                <div class="p-1">
+                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="(arg) => RgfCharComp.AddSubGroup()">+</button>
+                </div>
             </div>
+
             <div class="rgfcharts-flex-container rgfcharts-justify-content-start">
                 <div class="p-1">
                     <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("ChartType")</label>
-                    <InputSelect TValue="SeriesType" Value="_chartSettings.SeriesType" ValueExpression="() => _chartSettings.SeriesType" ValueChanged="(arg) => { _chartSettings.SeriesType = arg; _ = UpdateChart(); }">
-                        @foreach (var option in new SeriesType[] { SeriesType.Bar, SeriesType.Line, SeriesType.Pie, SeriesType.Donut })
+                    <InputSelect TValue="RgfChartSeriesType" Value="ChartParameters.SeriesType" ValueExpression="() => ChartParameters.SeriesType" ValueChanged="ChangeChartType">
+                        @foreach (var option in Enum.GetValues(typeof(RgfChartSeriesType)).Cast<RgfChartSeriesType>())
                         {
                             <option value="@option">@option</option>
                         }
                     </InputSelect>
                 </div>
                 <div class="p-1">
+                    <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("Legend")</label>
+                    <InputCheckbox Value="ChartParameters.Legend" ValueExpression="() => ChartParameters.Legend" ValueChanged="ChangedLegend" />
+                </div>
+                <div class="p-1">
                     <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("Stacked")</label>
-                    <InputCheckbox Value="_stacked" ValueExpression="() => _stacked" ValueChanged="(arg) => { _chartSettings.Options.Chart.Stacked = _stacked = arg; _ = UpdateChart(); }" />
+                    <InputCheckbox Value="ChartParameters.Stacked" ValueExpression="() => ChartParameters.Stacked" ValueChanged="(arg) => { _apexChartSettings.Options.Chart.Stacked = ChartParameters.Stacked = arg; _ = UpdateChart(); }" />
                 </div>
                 <div class="p-1">
                     <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("Horizontal")</label>
-                    <InputCheckbox Value="_horizontal" ValueExpression="() => _horizontal" ValueChanged="(arg) => { _chartSettings.Options.PlotOptions.Bar.Horizontal = _horizontal = arg; _ = UpdateChart(); }" />
+                    <InputCheckbox Value="ChartParameters.Horizontal" ValueExpression="() => ChartParameters.Horizontal" ValueChanged="(arg) => { _apexChartSettings.Options.PlotOptions.Bar.Horizontal = ChartParameters.Horizontal = arg; _ = UpdateChart(); }" />
                 </div>
+            </div>
+            <div class="rgfcharts-flex-container rgfcharts-justify-content-start">
                 <div class="p-1">
                     <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("Theme")</label>
-                    <InputSelect TValue="Mode?" Value="_chartSettings.Options.Theme.Mode" ValueExpression="() => _chartSettings.Options.Theme.Mode" ValueChanged="(arg) => { _chartSettings.Options.Theme.Mode = arg; _ = UpdateChart(); }">
+                    <InputSelect TValue="Mode?" Value="_apexChartSettings.Options.Theme.Mode" ValueExpression="() => _apexChartSettings.Options.Theme.Mode" ValueChanged="(arg) => { _apexChartSettings.Options.Theme.Mode = arg; _ = UpdateChart(); }">
                         @foreach (var option in Enum.GetValues(typeof(Mode)).Cast<Mode>())
                         {
                             <option value="@option">@option</option>
@@ -104,7 +132,7 @@
                 </div>
                 <div class="p-1">
                     <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("Palette")</label>
-                    <InputSelect TValue="PaletteType?" Value="_chartSettings.Options.Theme.Palette" ValueExpression="() => _chartSettings.Options.Theme.Palette" ValueChanged="(arg) => { _chartSettings.Options.Theme.Palette = arg; _ = UpdateChart(); }">
+                    <InputSelect TValue="PaletteType?" Value="_apexChartSettings.Options.Theme.Palette" ValueExpression="() => _apexChartSettings.Options.Theme.Palette" ValueChanged="(arg) => { _apexChartSettings.Options.Theme.Palette = arg; _ = UpdateChart(); }">
                         @foreach (var option in Enum.GetValues(typeof(PaletteType)).Cast<PaletteType>())
                         {
                             <option value="@option">@option</option>
@@ -113,19 +141,24 @@
                 </div>
                 <div class="p-1">
                     <label class="form-label">@RecroDict.GetRgfUiString("Width")</label>
-                    <InputNumber @bind-Value=@_chartSettings.Width style="width:5rem" />
+                    <InputNumber @bind-Value=@_apexChartSettings.Width style="width:5rem" />
                 </div>
                 <div class="p-1">
                     <label class="form-label">@RecroDict.GetRgfUiString("Height")</label>
-                    <InputNumber @bind-Value=@_chartSettings.Height style="width:5rem" />
+                    <InputNumber @bind-Value=@_apexChartSettings.Height style="width:5rem" />
+                </div>
+                <div class="p-1">
+                    <label class="form-label">Max.@RecroDict.GetRgfUiString("ItemCount")</label>
+                    <InputNumber @bind-Value=@ChartParameters.AggregationSettings.MaxResults style="width:5rem" />
                 </div>
             </div>
+
             <div class="rgfcharts-flex-container rgfcharts-justify-content-end">
                 <div class="p-1">
-                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="UpdateSize">@RecroDict.GetRgfUiString("Redraw")</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@(!RgfCharComp.IsStateValid)" @onclick="(arg) => UpdateChart()">@RecroDict.GetRgfUiString("Redraw")</button>
                 </div>
                 <div class="p-1">
-                    <button type="submit" class="btn btn-sm btn-primary" style="min-width:4rem">@RecroDict.GetRgfUiString("Create")</button>
+                    <button type="button" class="btn btn-sm btn-primary" style="min-width:4rem" @onclick="(arg) => Submit()">@RecroDict.GetRgfUiString("Create")</button>
                 </div>
                 <div class="p-1">
                     <button type="button" class="btn btn-sm btn-secondary" @onclick="RgfCharComp.OnClose" style="min-width:4rem">@RecroDict.GetRgfUiString("Close")</button>
@@ -134,9 +167,3 @@
         </EditForm>
     </FooterTemplate>
 </RgfChartComponent>
-
-@code {
-
-    [Parameter, EditorRequired]
-    public RgfEntityParameters EntityParameters { get; set; } = null!;
-}

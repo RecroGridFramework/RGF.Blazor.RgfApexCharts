@@ -1,7 +1,7 @@
 ﻿using ApexCharts;
 using Microsoft.AspNetCore.Components;
 using Recrovit.RecroGridFramework.Abstraction.Models;
-using System.Text.RegularExpressions;
+using System.Data;
 
 namespace Recrovit.RecroGridFramework.Blazor.RgfApexCharts.Components;
 
@@ -9,130 +9,114 @@ public partial class ApexChartComponent : ComponentBase
 {
     private ApexChart<ChartSerieData> _chartRef { get; set; } = null!;
 
-    public async Task RenderAsync(string title, RgfAggregationSettings aggregationSettings, string[] dataColumns, IRgfProperty[] chartColumns, List<RgfDynamicDictionary> chartData)
+    private List<string> xData = [];
+    private List<string> xAlias = [];
+
+    public Task UpdateChart() => _chartRef.RenderAsync();
+
+    public async Task RenderChartAsync(string title, RgfAggregationSettings aggregationSettings, List<RgfDynamicDictionary> dataColumns, IEnumerable<RgfDynamicDictionary> chartData)
     {
+        var columns = new List<string>();
         ChartSettings.Series.Clear();
         ChartSettings.Title = title;
 
-        var prop1 = aggregationSettings.Columns[0];
-        var prop2 = aggregationSettings.Columns[1];
-        bool isCount = aggregationSettings.Columns[0].Aggregate?.Equals("Count", StringComparison.OrdinalIgnoreCase) == true;
-
-        for (int i = 0; i < aggregationSettings.Columns.Count; i++)
+        xAlias = [];
+        foreach (var id in aggregationSettings.Groups)
         {
-            var colTitle = chartColumns.SingleOrDefault(e => e.Id == aggregationSettings.Columns[i].PropertyId)?.ColTitle;
-            if (i == 1)
+            for (int i = 0; i < dataColumns.Count; i++)
             {
-                ChartSettings.Title += " / ";
+                var propertyId = dataColumns[i].GetItemData("PropertyId")?.IntValue;
+                if (propertyId == id)
+                {
+                    var alias = dataColumns[i].Get<string>("Alias");
+                    xAlias.Add(alias);
+                    break;
+                }
             }
-            if (i > 1)
+        }
+        xData = chartData.GroupBy(arr => string.Join(" / ", xAlias.Select(alias => arr.GetMember(alias)?.ToString() ?? ""))).Select(e => e.Key).ToList();
+
+        for (int i = 0; i < dataColumns.Count; i++)
+        {
+            var acolumn = dataColumns[i];
+            var name = acolumn.Get<string>("Name");
+            var aggregate = acolumn.Get<string?>("Aggregate");
+            if (string.IsNullOrEmpty(aggregate))
+            {
+                continue;
+            }
+            var dataAlias = acolumn.Get<string>("Alias");
+            if (i > 0)
             {
                 ChartSettings.Title += ", ";
             }
-            if (!string.IsNullOrEmpty(colTitle))
+            if (!string.IsNullOrEmpty(name))
             {
-                ChartSettings.Title += i == 0 || isCount ? colTitle : $"{aggregationSettings.Columns[i].Aggregate}({colTitle})";
+                ChartSettings.Title += name;
             }
-            else if (isCount)
+            if (aggregate != "Count")
             {
-                ChartSettings.Title += "Count";
+                name = $"{aggregate}({name})";
             }
-        }
-
-        int yProp = 0;
-        int xProp = 1;
-        if (isCount)
-        {
-            if (dataColumns.Length > 2)
+            if (aggregationSettings.SubGroup.Count == 0)
             {
-                var group1arr = chartData.GroupBy(e => e.GetItemData(dataColumns[1]).StringValue).Select(g => new { Group = g.Key })
-                    .OrderBy(e => e.Group)
-                    .ToArray();
-
-                var group2arr = chartData.GroupBy(e => e.GetItemData(dataColumns[2]).StringValue).Select(g => new { Group = g.Key })
-                    .OrderBy(e => e.Group)
-                    .ToArray();
-
-                foreach (var group2 in group2arr)
+                AddSerie(chartData, dataColumns, name, dataAlias);
+            }
+            else
+            {
+                foreach (var id in aggregationSettings.SubGroup)
                 {
-                    var g2data = chartData.Where(e => group2.Group == e.GetItemData(dataColumns[2]).StringValue).ToArray();
-                    var serie = new ChartSerie();
-                    var prop = chartColumns.SingleOrDefault(e => e.Alias.Equals(group2.Group, StringComparison.OrdinalIgnoreCase));
-                    if (prop == null)
+                    for (int j = 0; j < dataColumns.Count; j++)
                     {
-                        prop = chartColumns.SingleOrDefault(e => e.Alias.Equals(Regex.Replace(group2.Group, @"\d+$", ""), StringComparison.OrdinalIgnoreCase));
-                    }
-                    serie.Name = prop?.ColTitle ?? group2.Group;
-                    foreach (var group1 in group1arr)
-                    {
-                        var cd = new ChartSerieData { X = group1.Group, Y = 0 };
-                        var data = g2data.SingleOrDefault(e => group1.Group == e.GetItemData(dataColumns[1]).StringValue);
-                        if (data != null)
+                        var propertyId = dataColumns[j].GetItemData("PropertyId")?.IntValue;
+                        if (propertyId == id)
                         {
-                            cd.Y = data.GetItemData(dataColumns[yProp]).TryGetDecimal(new System.Globalization.CultureInfo("en")) ?? 0;
+                            string galias = dataColumns[j].Get<string>("Alias");
+                            var group = chartData.GroupBy(e => e.GetMember(galias)?.ToString() ?? "").Select(g => g.Key).ToArray();
+                            foreach (var groupItem in group)
+                            {
+                                var data = chartData.Where(e => e.GetMember(galias)?.ToString() == groupItem).ToArray();
+                                AddSerie(data, dataColumns, groupItem, dataAlias);
+                            }
+                            break;
                         }
-                        serie.Data.Add(cd);
                     }
-                    ChartSettings.Series.Add(serie);
                 }
             }
-            else
-            {
-                var chart = new ChartSerie();
-                chart.Name = "Count";
-                chart.Data = chartData.Select(e => new ChartSerieData
-                {
-                    X = e.GetItemData(dataColumns[xProp]).StringValue,
-                    Y = e.GetItemData(dataColumns[yProp]).TryGetDecimal(new System.Globalization.CultureInfo("en")) ?? 0
-                }).OrderBy(e => e.X).ToList();
-                ChartSettings.Series.Add(chart);
-            }
         }
-        else
+        //await _chartRef.UpdateOptionsAsync(true, true, true);
+        //await _chartRef.UpdateSeriesAsync(true);
+        StateHasChanged();
+        await UpdateChart();
+    }
+
+    private void AddSerie(IEnumerable<RgfDynamicDictionary> chartData, List<RgfDynamicDictionary> dataColumns, string name, string dataAlias)
+    {
+        var serie = new ChartSerie()
         {
-            var g1 = chartColumns.SingleOrDefault(e => e.Id == prop1.PropertyId)?.Alias;
-            if (g1 != null)
+            Name = name,
+            Data = []
+        };
+        foreach (var item in xData)
+        {
+            var data = chartData.SingleOrDefault(e => string.Join(" / ", xAlias.Select(alias => e.GetMember(alias)?.ToString() ?? "")) == item);
+            var sd = new ChartSerieData()
             {
-                xProp = dataColumns.ToList().FindIndex(e => string.Equals(e, g1, StringComparison.OrdinalIgnoreCase));
+                Y = data?.GetItemData(dataAlias).TryGetDecimal(new System.Globalization.CultureInfo("en")) ?? 0
+            };
+            if (xAlias.Count > 1 &&
+                (ChartSettings.SeriesType == SeriesType.Bar || ChartSettings.SeriesType == SeriesType.Line) &&
+                data != null)
+            {
+                sd.X = xAlias.Select(alias => data.GetMember(alias)?.ToString() ?? "").ToArray();
             }
             else
             {
-                xProp = 0;
+                sd.X = item;
             }
-            for (yProp = 0; yProp < dataColumns.Length; yProp++)
-            {
-                if (yProp == xProp && g1 != null)
-                {
-                    continue;
-                }
-                var serie = new ChartSerie();
-                var prop = chartColumns.SingleOrDefault(e => e.Alias.Equals(dataColumns[yProp], StringComparison.OrdinalIgnoreCase));
-                if (prop == null)
-                {
-                    prop = chartColumns.SingleOrDefault(e => e.Alias.Equals(Regex.Replace(dataColumns[yProp], @"\d+$", ""), StringComparison.OrdinalIgnoreCase));
-                }
-                serie.Name = prop?.ColTitle ?? dataColumns[yProp];
-                serie.Data = chartData.Select(e => new ChartSerieData
-                {
-                    X = g1 == null ? serie.Name : e.GetItemData(dataColumns[xProp]).StringValue,
-                    Y = e.GetItemData(dataColumns[yProp]).TryGetDecimal(new System.Globalization.CultureInfo("en")) ?? 0
-                }).OrderBy(e => e.X).ToList();
-                ChartSettings.Series.Add(serie);
-            }
+            serie.Data.Add(sd);
+
         }
-        StateHasChanged();
-        await _chartRef.UpdateSeriesAsync(true);
-        await _chartRef.UpdateOptionsAsync(true, true, true);
-    }
-
-    public async Task UpdateSize()
-    {
-        await _chartRef.UpdateOptionsAsync(true, true, false);
-    }
-
-    public async Task UpdateChart()
-    {
-        await _chartRef.RenderAsync();
-        StateHasChanged();
+        ChartSettings.Series.Add(serie);
     }
 }

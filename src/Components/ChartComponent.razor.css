@@ -1,6 +1,7 @@
 ﻿.rgfcharts-flex-container {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
 }
 
 .rgfcharts-justify-content-start {

@@ -43,6 +43,7 @@
 
   <ItemGroup Condition="'$(Configuration)'=='Release'">
     <PackageReference Include="Recrovit.RecroGridFramework.Client.Blazor" Version="8.10.0" />
+    <Content Update="wwwroot\scripts\recrovit-rgf-blazor.js" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(Configuration)'=='Debug'">
@@ -55,7 +56,9 @@
 
   <ItemGroup>
     <None Include="..\.gitignore" />
+    <None Include="bundleconfig.json" />
     <None Include="..\README.*" Pack="true" PackagePath="\" />
+    <Content Remove="bundleconfig.json" />
   </ItemGroup>
 
 </Project>

@@ -1,8 +1,8 @@
 ﻿<ApexChart TItem="ChartSerieData"
            Title="@ChartSettings.Title"
            Options="@ChartSettings.Options"
-           Height="@(ChartSettings.Height == null ? "100%" : ChartSettings.Height)"
-           Width="@(ChartSettings.Width == null ? "100%" : ChartSettings.Width)"
+           Width="@ChartSettings.Width"
+           Height="@ChartSettings.Height"
            @ref=_chartRef>
 
     @foreach (var serie in ChartSettings.Series)
@@ -13,7 +13,7 @@
                          SeriesType="(SeriesType)ChartSettings.SeriesType"
                          XValue="@(e => e.X)"
                          YValue="@(e => e.Y)"
-                         ShowDataLabels />
+                         ShowDataLabels="true" />
     }
 </ApexChart>
 
