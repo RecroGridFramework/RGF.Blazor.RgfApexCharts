@@ -11,6 +11,8 @@ public partial class ApexChartComponent : ComponentBase
 
     private List<string> xData = [];
     private List<string> xAlias = [];
+    private List<string> sgData = [];
+    private List<string> sgAlias = [];
 
     public Task UpdateChart() => _chartRef.RenderAsync();
 
@@ -34,7 +36,23 @@ public partial class ApexChartComponent : ComponentBase
                 }
             }
         }
-        xData = chartData.GroupBy(arr => string.Join(" / ", xAlias.Select(alias => arr.GetMember(alias)?.ToString() ?? ""))).Select(e => e.Key).ToList();
+        xData = chartData.GroupBy(arr => string.Join(" / ", xAlias.Select(alias => arr.GetMember(alias)?.ToString() ?? alias))).Select(e => e.Key).ToList();
+
+        sgAlias = [];
+        foreach (var id in aggregationSettings.SubGroup)
+        {
+            for (int i = 0; i < dataColumns.Count; i++)
+            {
+                var propertyId = dataColumns[i].GetItemData("PropertyId")?.IntValue;
+                if (propertyId == id)
+                {
+                    var alias = dataColumns[i].Get<string>("Alias");
+                    sgAlias.Add(alias);
+                    break;
+                }
+            }
+        }
+        sgData = chartData.GroupBy(arr => string.Join(" / ", sgAlias.Select(alias => arr.GetMember(alias)?.ToString() ?? alias))).Select(e => e.Key).ToList();
 
         for (int i = 0; i < dataColumns.Count; i++)
         {
@@ -64,23 +82,10 @@ public partial class ApexChartComponent : ComponentBase
             }
             else
             {
-                foreach (var id in aggregationSettings.SubGroup)
+                foreach (var item in sgData)
                 {
-                    for (int j = 0; j < dataColumns.Count; j++)
-                    {
-                        var propertyId = dataColumns[j].GetItemData("PropertyId")?.IntValue;
-                        if (propertyId == id)
-                        {
-                            string galias = dataColumns[j].Get<string>("Alias");
-                            var group = chartData.GroupBy(e => e.GetMember(galias)?.ToString() ?? "").Select(g => g.Key).ToArray();
-                            foreach (var groupItem in group)
-                            {
-                                var data = chartData.Where(e => e.GetMember(galias)?.ToString() == groupItem).ToArray();
-                                AddSerie(data, dataColumns, groupItem, dataAlias);
-                            }
-                            break;
-                        }
-                    }
+                    var data = chartData.Where(e => string.Join(" / ", sgAlias.Select(alias => e.GetMember(alias)?.ToString() ?? alias)) == item).ToArray();
+                    AddSerie(data, dataColumns, item, dataAlias);
                 }
             }
         }
@@ -99,7 +104,7 @@ public partial class ApexChartComponent : ComponentBase
         };
         foreach (var item in xData)
         {
-            var data = chartData.SingleOrDefault(e => string.Join(" / ", xAlias.Select(alias => e.GetMember(alias)?.ToString() ?? "")) == item);
+            var data = chartData.SingleOrDefault(e => string.Join(" / ", xAlias.Select(alias => e.GetMember(alias)?.ToString() ?? alias)) == item);
             var sd = new ChartSerieData()
             {
                 Y = data?.GetItemData(dataAlias).TryGetDecimal(new System.Globalization.CultureInfo("en")) ?? 0
