@@ -1,6 +1,5 @@
 ﻿using ApexCharts;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.JSInterop;
 using Recrovit.RecroGridFramework.Abstraction.Contracts.Services;
 using Recrovit.RecroGridFramework.Abstraction.Models;
@@ -12,6 +11,13 @@ using Recrovit.RecroGridFramework.Client.Handlers;
 
 namespace Recrovit.RecroGridFramework.Blazor.RgfApexCharts.Components;
 
+public enum RecroChartTab
+{
+    Settings = 1,
+    Chart = 2,
+    Grid = 3
+}
+
 public abstract class BaseChartComponent : ComponentBase
 {
     [Parameter, EditorRequired]
@@ -21,6 +27,40 @@ public abstract class BaseChartComponent : ComponentBase
     {
         _id++;
         ContainerId = $"rgf-apexchart-{_id}";
+        ApexChartSettings = new()
+        {
+            Options = new()
+            {
+                Theme = new Theme
+                {
+                    Mode = Mode.Light,
+                    Palette = PaletteType.Palette1
+                },
+                Chart = new()
+                {
+                    Stacked = false,
+                    Toolbar = new() { Show = true }
+                },
+                NoData = new NoData { Text = "No Data..." },
+                PlotOptions = new PlotOptions()
+                {
+                    Bar = new PlotOptionsBar()
+                    {
+                        Horizontal = false,
+                        DataLabels = new PlotOptionsBarDataLabels { Total = new BarTotalDataLabels { Style = new BarDataLabelsStyle { FontWeight = "800" } } }
+                    }
+                },
+                DataLabels = new DataLabels
+                {
+                    Enabled = true,
+                    Formatter = "function (value) { return Array.isArray(value) ? value.join('/') : value?.toLocaleString(); }"
+                },
+                Yaxis = new List<YAxis>()
+                {
+                    new YAxis { Labels = new YAxisLabels { Formatter = "function (value) { return Array.isArray(value) ? value.join('/') : value?.toLocaleString(); }" } }
+                }
+            }
+        };
     }
 
     [Inject]
@@ -39,68 +79,55 @@ public abstract class BaseChartComponent : ComponentBase
 
     protected readonly string ContainerId;
 
-    protected int ActiveTabIndex { get; set; } = 1;
+    protected RecroChartTab ActiveTabIndex { get; set; } = RecroChartTab.Grid;
 
     protected bool SettingsAccordionActive { get; set; } = true;
 
-    protected EditContext EditContext { get; set; } = null!;
-
-    protected ValidationMessageStore MessageStore { get; set; } = null!;
-
     protected IRgManager Manager => EntityParameters.Manager!;
 
-    protected RgfChartParameters ChartParameters => EntityParameters.ChartParameters;
+    protected RgfChartSettings _chartSettings => RgfChartRef.ChartSettings;
 
-    protected ApexChartSettings ApexChartSettings { get; set; } = new();
+    protected ApexChartSettings ApexChartSettings { get; set; }
 
     protected override void OnInitialized()
     {
         EntityParameters.ChartParameters.EventDispatcher.Subscribe(RgfChartEventKind.ShowChart, (arg) => OnInitSize(true));
+    }
 
-        var aggregationSettings = ChartParameters.AggregationSettings;
-        aggregationSettings.Columns = new List<RgfAggregationColumn>
+    protected override void OnAfterRender(bool firstRender)
+    {
+        base.OnAfterRender(firstRender);
+        if (firstRender)
         {
-            new() { PropertyId = 0, Aggregate = "Count" }
-        };
+            Initialize(_chartSettings);
+        }
+    }
 
-        EditContext = new(aggregationSettings);
-        EditContext.OnValidationRequested += HandleValidationRequested;
-        MessageStore = new(EditContext);
-
-        ApexChartSettings.Options = new()
-        {
-            Theme = new Theme { Mode = Mode.Light, Palette = PaletteType.Palette1 },
-            Chart = new()
-            {
-                Stacked = ChartParameters.Stacked,
-                Toolbar = new() { Show = true }
-            },
-            NoData = new NoData { Text = "No Data..." },
-            PlotOptions = new PlotOptions()
-            {
-                Bar = new PlotOptionsBar()
-                {
-                    Horizontal = ChartParameters.Horizontal,
-                    DataLabels = new PlotOptionsBarDataLabels { Total = new BarTotalDataLabels { Style = new BarDataLabelsStyle { FontWeight = "800" } } }
-                }
-            },
-            DataLabels = new DataLabels
-            {
-                Enabled = true,
-                Formatter = "function (value) { return Array.isArray(value) ? value.join('/') : value.toLocaleString(); }"
-            },
-            Yaxis = new List<YAxis>()
-            {
-                new YAxis { Labels = new YAxisLabels { Formatter = "function (value) { return Array.isArray(value) ? value.join('/') : value.toLocaleString(); }" } }
-            }
-        };
+    protected void Initialize(RgfChartSettings chartSetting)
+    {
+        ApexChartSettings.Options.Theme.Mode = Enum.TryParse(chartSetting.Theme, out Mode mode) ? mode : Mode.Light;
+        ApexChartSettings.Options.Theme.Palette = Enum.TryParse(chartSetting.Palette, out PaletteType palette) ? palette : PaletteType.Palette1;
+        ApexChartSettings.Options.Chart.Stacked = chartSetting.Stacked;
+        ApexChartSettings.Options.PlotOptions.Bar.Horizontal = chartSetting.Horizontal;
+        ChangeChartType(chartSetting.SeriesType);
+        ChangedShowDataLabels(chartSetting.ShowDataLabels);
+        ChangedLegend(chartSetting.Legend);
+        ApexChartSettings.Width = chartSetting.Width;
+        ApexChartSettings.Height = chartSetting.Height;
+        ApexChartSettings.Title = "";
+        ApexChartSettings.Series.Clear();
     }
 
     protected virtual async Task OnInitSize(bool recreate = false)
     {
+        if (recreate)
+        {
+            SettingsAccordionActive = true;
+            Initialize(_chartSettings);
+        }
         if (!recreate && _selfRef != null)
         {
-            await _jsRuntime.InvokeVoidAsync($"{RgfApexChartsConfiguration.JsApexChartsNamespace}.resize", ContainerId, _selfRef);
+            await _jsRuntime.InvokeVoidAsync($"{RgfApexChartsConfiguration.JsApexChartsNamespace}.resize", ContainerId, _selfRef, ApexChartSettings.Width, ApexChartSettings.Height);
         }
         else
         {
@@ -110,6 +137,10 @@ public abstract class BaseChartComponent : ComponentBase
             {
                 _selfRef ??= DotNetObjectReference.Create(this);
                 inited = await _jsRuntime.InvokeAsync<bool>($"{RgfApexChartsConfiguration.JsApexChartsNamespace}.initialize", ContainerId, _selfRef);
+                if (inited && (ApexChartSettings.Width == null || ApexChartSettings.Height == null))
+                {
+                    await _jsRuntime.InvokeVoidAsync($"{RgfApexChartsConfiguration.JsApexChartsNamespace}.resize", ContainerId, _selfRef, ApexChartSettings.Width, ApexChartSettings.Height);
+                }
             }
             if (!inited)
             {
@@ -124,88 +155,142 @@ public abstract class BaseChartComponent : ComponentBase
 
     public virtual async Task Resize(int width, int height)
     {
+        if (ActiveTabIndex != RecroChartTab.Chart || RgfChartRef == null)
+        {
+            return;
+        }
         ApexChartSettings.Width = width < 1 ? null : Math.Max(width, 100);
-        ApexChartSettings.Height = height < 1 ? null : Math.Max(height - 30, 100);
+        ApexChartSettings.Height = height < 1 ? null : Math.Max(height - 50, 100);
+        RgfChartRef.ChartSettings.Width = ApexChartSettings.Width;
+        RgfChartRef.ChartSettings.Height = ApexChartSettings.Height;
         StateHasChanged();
-        if (RgfChartRef?.IsStateValid == true && RgfChartRef.ChartData.Count > 0)
+        if (RgfChartRef.DataStatus == RgfProcessingStatus.Valid)
         {
             await UpdateChart();
         }
     }
 
-    protected void HandleValidationRequested(object? sender, ValidationRequestedEventArgs e) => RgfChartRef?.Validation(MessageStore, ChartParameters);
-
     protected async Task OnRedraw()
     {
-        SettingsAccordionActive = false;
-        StateHasChanged();
+        bool change = ActiveTabIndex != RecroChartTab.Chart || SettingsAccordionActive;
+        if (change)
+        {
+            SettingsAccordionActive = false;
+            ActiveTabIndex = RecroChartTab.Chart;
+            StateHasChanged();
+            await Task.Delay(1000);
+        }
         await UpdateChart();
     }
 
-    protected virtual async Task<bool> OnOk()
+    protected virtual async Task<bool> OnCreateChart()
     {
-        if (RgfChartRef == null || !EditContext.Validate())
+        if (RgfChartRef?.EditContext.Validate() != true)
         {
             return false;
         }
         SettingsAccordionActive = false;
+        ActiveTabIndex = RecroChartTab.Chart;
         StateHasChanged();
-        _ = Task.Run(() => OnInitSize() );
-        return await OnCreate();
+        await Task.Delay(50);
+        await OnInitSize();
+        if (RgfChartRef.DataStatus == RgfProcessingStatus.Valid || await GetData())
+        {
+            await UpdateChart();
+            return true;
+        }
+        return false;
     }
 
-    protected async Task<bool> OnCreate()
+    protected virtual async Task<bool> OnGetData()
     {
-        var toast = RgfToastEvent.CreateActionEvent(RecroDict.GetRgfUiString("Request"), Manager.EntityDesc.MenuTitle, "RecroChart");
-        await Manager.ToastManager.RaiseEventAsync(toast, this);
-        var success = await RgfChartRef.CreateChartDataAsyc(ChartParameters.AggregationSettings);
-        if (!success)
+        if (RgfChartRef?.EditContext.Validate() != true)
         {
             return false;
         }
+        SettingsAccordionActive = false;
+        ActiveTabIndex = RecroChartTab.Grid;
+        return await GetData();
+    }
+
+    protected async Task<bool> GetData()
+    {
+        if (RgfChartRef.DataStatus == RgfProcessingStatus.Valid)
+        {
+            return false;
+        }
+        var toast = RgfToastEvent.CreateActionEvent(RecroDict.GetRgfUiString("Request"), Manager.EntityDesc.MenuTitle, RgfChartRef.GetRecroDictChart("DataSet"), delay: 0);
+        await Manager.ToastManager.RaiseEventAsync(toast, this);
+
+        var success = await RgfChartRef.CreateChartDataAsyc();
+        if (!success)
+        {
+            // Switch to this tab because the error message appears here
+            ActiveTabIndex = RecroChartTab.Grid;
+            await Manager.ToastManager.RaiseEventAsync(RgfToastEvent.RemoveToast(toast), this);
+            return false;
+        }
         await Manager.ToastManager.RaiseEventAsync(RgfToastEvent.RecreateToastWithStatus(toast, RecroDict.GetRgfUiString("Processed"), RgfToastType.Success, delay: 2000), this);
-        await UpdateChart(true);
+        ApexChartSettings.Title = "";
+        ApexChartSettings.Series.Clear();
+        await ApexChartRef.UpdateChart();
+        StateHasChanged();
         return true;
     }
 
-    protected virtual async Task UpdateChart(bool recreate = false)
+    protected virtual async Task UpdateChart()
     {
-        if (RgfChartRef?.IsStateValid != true)
+        var currentStatus = RgfChartRef.ChartStatus;
+        if (ApexChartRef == null || currentStatus == RgfProcessingStatus.InProgress)
+        {
+            return;
+        }
+
+        if (RgfChartRef?.DataStatus != RgfProcessingStatus.Valid)
         {
             await Manager.ToastManager.RaiseEventAsync(new RgfToastEvent(RecroDict.GetRgfUiString("Warning"), RecroDict.GetRgfUiString("InvalidState"), RgfToastType.Warning), this);
             return;
         }
-        if (ApexChartRef != null)
+
+        RgfChartRef.ChartStatus = RgfProcessingStatus.InProgress;// Prevents the chart from being redrawn when the data is updated
+        try
         {
             RgfToastEvent toast;
-            if (recreate)
+            if (currentStatus == RgfProcessingStatus.Invalid)
             {
-                toast = RgfToastEvent.CreateActionEvent(RecroDict.GetRgfUiString("Request"), Manager.EntityDesc.MenuTitle, "Render");
+                toast = RgfToastEvent.CreateActionEvent(RecroDict.GetRgfUiString("Request"), Manager.EntityDesc.MenuTitle, "Render", delay: 0);
                 await Manager.ToastManager.RaiseEventAsync(toast, this);
-                await ApexChartRef.RenderChartAsync($"{Manager.EntityDesc.Title} : ", ChartParameters.AggregationSettings, RgfChartRef.DataColumns, RgfChartRef.ChartData);
+                StateHasChanged();
+                await Task.Delay(50);
+                await ApexChartRef.RenderChartAsync(_chartSettings.SettingsName, $"{Manager.EntityDesc.Title} : ", _chartSettings.AggregationSettings, RgfChartRef.DataColumns, RgfChartRef.ChartData);
             }
             else
             {
-                toast = RgfToastEvent.CreateActionEvent(RecroDict.GetRgfUiString("Request"), Manager.EntityDesc.MenuTitle, RecroDict.GetRgfUiString("Redraw"));
+                toast = RgfToastEvent.CreateActionEvent(RecroDict.GetRgfUiString("Request"), Manager.EntityDesc.MenuTitle, RecroDict.GetRgfUiString("Redraw"), delay: 0);
                 await Manager.ToastManager.RaiseEventAsync(toast, this);
                 await ApexChartRef.UpdateChart();
             }
             await Manager.ToastManager.RaiseEventAsync(RgfToastEvent.RecreateToastWithStatus(toast, RecroDict.GetRgfUiString("Processed"), RgfToastType.Success, 2000), this);
+            RgfChartRef.ChartStatus = RgfProcessingStatus.Valid;
+        }
+        catch
+        {
+            RgfChartRef.ChartStatus = RgfProcessingStatus.Invalid;
         }
     }
 
-    protected Task TryUpdateChart(object? args)
+    protected Task TryUpdateChart(object? args = null)
     {
-        if (RgfChartRef?.IsStateValid == true)
+        if (RgfChartRef?.ChartStatus == RgfProcessingStatus.Valid)
         {
             return UpdateChart();
         }
         return Task.CompletedTask;
     }
 
-    protected async Task ChangeChartType(RgfChartSeriesType seriesType)
+    protected Task ChangeChartType(RgfChartSeriesType seriesType)
     {
-        ChartParameters.SeriesType = seriesType;
+        _chartSettings.SeriesType = seriesType;
         switch (seriesType)
         {
             case RgfChartSeriesType.Bar:
@@ -224,32 +309,86 @@ public abstract class BaseChartComponent : ComponentBase
                 ApexChartSettings.SeriesType = SeriesType.Donut;
                 break;
         }
-        if (RgfChartRef?.IsStateValid == true)
-        {
-            await UpdateChart(true);
-        }
+        return TryUpdateChart();
     }
 
-    protected async Task ChangedLegend(bool value)
+    protected Task ChangedStacked(bool value)
     {
-        ChartParameters.Legend = value;
+        _chartSettings.Stacked = value;
+        ApexChartSettings.Options.Chart.Stacked = value;
+        return TryUpdateChart();
+    }
+
+    protected Task ChangedHorizontal(bool value)
+    {
+        _chartSettings.Horizontal = value;
+        ApexChartSettings.Options.PlotOptions.Bar.Horizontal = value;
+        return TryUpdateChart();
+    }
+
+    protected Task ChangedShowDataLabels(bool value)
+    {
+        _chartSettings.ShowDataLabels = value;
+        ApexChartSettings.ShowDataLabels = value;
+        return TryUpdateChart();
+    }
+
+    protected Task ChangedLegend(bool value)
+    {
+        _chartSettings.Legend = value;
         ApexChartSettings.Options.Legend = !value ? default : new Legend
         {
             Formatter = @"function(seriesName, opts) { return [seriesName, ' - ', opts.w.globals.series[opts.seriesIndex].toLocaleString()] }"
         };
-        if (RgfChartRef?.IsStateValid == true)
-        {
-            await UpdateChart();
-        }
+        return TryUpdateChart();
     }
 
-    protected virtual void OnTabActivated(int index)
+    protected Task ChangeTheme(Mode? value)
     {
-        ActiveTabIndex = index;
+        _chartSettings.Theme = value?.ToString();
+        ApexChartSettings.Options.Theme.Mode = value;
+        return TryUpdateChart();
+    }
+
+    protected Task ChangePalette(PaletteType? value)
+    {
+        _chartSettings.Palette = value?.ToString();
+        ApexChartSettings.Options.Theme.Palette = value;
+        return TryUpdateChart();
+    }
+
+    protected void ChangedWidth(int? value)
+    {
+        _chartSettings.Width = value;
+        ApexChartSettings.Width = value;
+    }
+
+    protected void ChangedHeight(int? value)
+    {
+        _chartSettings.Height = value;
+        ApexChartSettings.Height = value;
+    }
+
+    protected virtual void OnTabActivated(RecroChartTab tab)
+    {
+        ActiveTabIndex = tab;
     }
 
     protected virtual void OnSettingsAccordionToggled()
     {
         SettingsAccordionActive = !SettingsAccordionActive;
+    }
+
+    protected async Task OnChartSettingsChanged(KeyValuePair<object?, string> arg)
+    {
+        var res = await RgfChartRef.OnSetChartSettingAsync(arg.Key?.ToString(), arg.Value);
+        if (res)
+        {
+            RgfChartRef.SetDataStatus(RgfProcessingStatus.Invalid);
+            SettingsAccordionActive = true;
+            Initialize(_chartSettings);
+            StateHasChanged();
+            await OnGetData();
+        }
     }
 }

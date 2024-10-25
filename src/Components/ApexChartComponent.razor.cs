@@ -1,12 +1,18 @@
 ﻿using ApexCharts;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.Logging;
 using Recrovit.RecroGridFramework.Abstraction.Models;
+using Recrovit.RecroGridFramework.Client.Blazor.Components;
 using System.Data;
+using System.Globalization;
 
 namespace Recrovit.RecroGridFramework.Blazor.RgfApexCharts.Components;
 
 public partial class ApexChartComponent : ComponentBase
 {
+    [Inject]
+    private ILogger<RgfChartComponent> _logger { get; set; } = null!;
+
     private ApexChart<ChartSerieData> _chartRef { get; set; } = null!;
 
     private List<string> xData = [];
@@ -14,21 +20,29 @@ public partial class ApexChartComponent : ComponentBase
     private List<string> sgData = [];
     private List<string> sgAlias = [];
 
-    public Task UpdateChart() => _chartRef.RenderAsync();
+    public async Task UpdateChart()
+    {
+        _logger.LogDebug("UpdateChart");
+        StateHasChanged();
+        await Task.Delay(50);
+        //await _chartRef.UpdateOptionsAsync(true, true, true);
+        //await _chartRef.UpdateSeriesAsync(true);
+        await _chartRef.RenderAsync();
+    }
 
-    public async Task RenderChartAsync(string title, RgfAggregationSettings aggregationSettings, List<RgfDynamicDictionary> dataColumns, IEnumerable<RgfDynamicDictionary> chartData)
+    public async Task RenderChartAsync(string title, string chartName, RgfAggregationSettings aggregationSettings, List<RgfDynamicDictionary> dataColumns, IEnumerable<RgfDynamicDictionary> chartData)
     {
         var columns = new List<string>();
         ChartSettings.Series.Clear();
-        ChartSettings.Title = title;
+        ChartSettings.Title = string.IsNullOrEmpty(title) ? chartName : title;
 
         xAlias = [];
-        foreach (var id in aggregationSettings.Groups)
+        foreach (var group in aggregationSettings.Groups)
         {
             for (int i = 0; i < dataColumns.Count; i++)
             {
                 var propertyId = dataColumns[i].GetItemData("PropertyId")?.IntValue;
-                if (propertyId == id)
+                if (propertyId == group.Id)
                 {
                     var alias = dataColumns[i].Get<string>("Alias");
                     xAlias.Add(alias);
@@ -39,12 +53,12 @@ public partial class ApexChartComponent : ComponentBase
         xData = chartData.GroupBy(arr => string.Join(" / ", xAlias.Select(alias => arr.GetMember(alias)?.ToString() ?? alias))).Select(e => e.Key).ToList();
 
         sgAlias = [];
-        foreach (var id in aggregationSettings.SubGroup)
+        foreach (var group in aggregationSettings.SubGroup)
         {
             for (int i = 0; i < dataColumns.Count; i++)
             {
                 var propertyId = dataColumns[i].GetItemData("PropertyId")?.IntValue;
-                if (propertyId == id)
+                if (propertyId == group.Id)
                 {
                     var alias = dataColumns[i].Get<string>("Alias");
                     sgAlias.Add(alias);
@@ -52,7 +66,8 @@ public partial class ApexChartComponent : ComponentBase
                 }
             }
         }
-        sgData = chartData.GroupBy(arr => string.Join(" / ", sgAlias.Select(alias => arr.GetMember(alias)?.ToString() ?? alias))).Select(e => e.Key).ToList();
+        sgData = chartData.GroupBy(arr => string.Join(" / ", sgAlias.Select(alias => arr.GetMember(alias)?.ToString() ?? alias))).Select(e => e.Key).OrderBy(e => e).ToList();
+        var cultureInfo = new System.Globalization.CultureInfo("en");
 
         for (int i = 0; i < dataColumns.Count; i++)
         {
@@ -64,13 +79,16 @@ public partial class ApexChartComponent : ComponentBase
                 continue;
             }
             var dataAlias = acolumn.Get<string>("Alias");
-            if (i > 0)
+            if (string.IsNullOrEmpty(title))
             {
-                ChartSettings.Title += ", ";
-            }
-            if (!string.IsNullOrEmpty(name))
-            {
-                ChartSettings.Title += name;
+                if (i > 0)
+                {
+                    ChartSettings.Title += ", ";
+                }
+                if (!string.IsNullOrEmpty(name))
+                {
+                    ChartSettings.Title += name;
+                }
             }
             if (aggregate != "Count")
             {
@@ -78,25 +96,25 @@ public partial class ApexChartComponent : ComponentBase
             }
             if (aggregationSettings.SubGroup.Count == 0)
             {
-                AddSerie(chartData, dataColumns, name, dataAlias);
+                var data = chartData.ToDictionary(e => string.Join(" / ", xAlias.Select(alias => e.GetMember(alias)?.ToString() ?? alias)), v => v);
+                AddSerie(data, name, dataAlias, cultureInfo);
             }
             else
             {
                 foreach (var item in sgData)
                 {
-                    var data = chartData.Where(e => string.Join(" / ", sgAlias.Select(alias => e.GetMember(alias)?.ToString() ?? alias)) == item).ToArray();
-                    AddSerie(data, dataColumns, item, dataAlias);
+                    var data = chartData.Where(e => string.Join(" / ", sgAlias.Select(alias => e.GetMember(alias)?.ToString() ?? alias)) == item)
+                        .ToDictionary(e => string.Join(" / ", xAlias.Select(alias => e.GetMember(alias)?.ToString() ?? alias)), v => v);
+                    AddSerie(data, $"{item}: {name}", dataAlias, cultureInfo);
                 }
             }
         }
-        //await _chartRef.UpdateOptionsAsync(true, true, true);
-        //await _chartRef.UpdateSeriesAsync(true);
-        StateHasChanged();
         await UpdateChart();
     }
 
-    private void AddSerie(IEnumerable<RgfDynamicDictionary> chartData, List<RgfDynamicDictionary> dataColumns, string name, string dataAlias)
+    private void AddSerie(Dictionary<string, RgfDynamicDictionary> chartData, string name, string dataAlias, CultureInfo cultureInfo)
     {
+        _logger.LogDebug($"AddSerie: {name}");
         var serie = new ChartSerie()
         {
             Name = name,
@@ -104,10 +122,10 @@ public partial class ApexChartComponent : ComponentBase
         };
         foreach (var item in xData)
         {
-            var data = chartData.SingleOrDefault(e => string.Join(" / ", xAlias.Select(alias => e.GetMember(alias)?.ToString() ?? alias)) == item);
+            var data = chartData.TryGetValue(item, out var chartEntry) ? chartEntry : null;
             var sd = new ChartSerieData()
             {
-                Y = data?.GetItemData(dataAlias).TryGetDecimal(new System.Globalization.CultureInfo("en")) ?? 0
+                Y = data?.GetItemData(dataAlias).TryGetDecimal(cultureInfo) ?? 0
             };
             if (xAlias.Count > 1 &&
                 (ChartSettings.SeriesType == SeriesType.Bar || ChartSettings.SeriesType == SeriesType.Line) &&
@@ -117,7 +135,7 @@ public partial class ApexChartComponent : ComponentBase
             }
             else
             {
-                sd.X = item;
+                sd.X = item ?? "";
             }
             serie.Data.Add(sd);
 

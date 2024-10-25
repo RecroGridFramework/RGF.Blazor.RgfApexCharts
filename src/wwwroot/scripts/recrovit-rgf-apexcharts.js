@@ -1,5 +1,5 @@
 ﻿/*!
-* recrovit-rgf-apexcharts.js v1.1.0
+* recrovit-rgf-apexcharts.js v1.2.0
 */
 
 window.Recrovit = window.Recrovit || {};
@@ -17,15 +17,19 @@ Blazor.ApexCharts = {
         dialog.on('resizestop', function (event, ui) {
             RgfApexCharts.resize(containerId, chartRef);
         });
-        await RgfApexCharts.resize(containerId, chartRef);
         return true;
     },
-    resize: async function (containerId, chartRef) {
+    resize: async function (containerId, chartRef, width, height) {
         var container = $(`#${containerId}`).parent();
-        var w = Math.floor($('.rgf-apexchart-content', container).first().width());
-        var h1 = Math.floor(container.height());
-        var h = h1 - Math.floor($('.rgf-apexchart-header', container).first().height());
-        await chartRef.invokeMethodAsync('OnResize', w, h);
+        if (width == null) {
+            width = Math.floor($('.rgf-apexchart-content', container).first().width());
+        }
+        if (height == null) {
+            var h1 = Math.floor(container.height());
+            var h2 = h1 - Math.floor($('.rgf-apexchart-header', container).first().outerHeight(true)) | 0;
+            height = h2 - Math.floor($('.rgf-apexchart-settings', container).first().outerHeight(true)) | 0;
+        }
+        await chartRef.invokeMethodAsync('OnResize', width, height);
     }
 };
 
