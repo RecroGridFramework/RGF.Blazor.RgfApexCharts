@@ -164,6 +164,13 @@
                                          ValueChanged="ChangedHeight" />
                         </div>
                     </div>
+
+                    <div class="rgfcharts-flex-container rgfcharts-justify-content-start">
+                        <div class="p-1">
+                            <label class="col-form-label text-nowrap">@RecroDict.GetRgfUiString("Remark")</label>
+                            <InputTextArea @bind-Value="RgfCharComp.ChartSettings.Remark" />
+                        </div>
+                    </div>
                 </EditForm>
             </div>
         </div>
