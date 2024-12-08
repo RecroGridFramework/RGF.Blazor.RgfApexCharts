@@ -26,7 +26,8 @@
     <Description>RecroGrid Framework Blazor ApexCharts.</Description>
     <PackageTags>RecroGrid Framework Blazor ApexCharts</PackageTags>
     <RepositoryUrl>https://github.com/RecroGridFramework/RGF.Blazor.RgfApexCharts.git</RepositoryUrl>
-    <PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
+    <PackageLicenseExpression>LGPL-3.0-only</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
