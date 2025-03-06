@@ -40,11 +40,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Blazor-ApexCharts" Version="5.0.1" />
+    <PackageReference Include="Blazor-ApexCharts" Version="5.1.0" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(Configuration)'=='Release'">
-    <PackageReference Include="Recrovit.RecroGridFramework.Client.Blazor" Version="8.16.1" />
+    <PackageReference Include="Recrovit.RecroGridFramework.Client.Blazor" Version="8.17.0" />
     <Content Update="wwwroot\scripts\recrovit-rgf-blazor.js" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
